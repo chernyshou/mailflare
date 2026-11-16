@@ -25,8 +25,10 @@ async function storeWebhook(env: CloudflareEnv, id: string | null, secret: strin
 	await getDb(env).insert(appSettings).values({ id: "default", ...values }).onConflictDoUpdate({ target: appSettings.id, set: values });
 }
 
+const isResendInboundMx = (content: string) => /rmta\.net|receive\./i.test(content.trim());
+
 function inboundMx(records: ResendDomainRecord[] | undefined) {
-	return (records ?? []).find((record) => record.type === "MX" && isInboundSmtpMx(record.value)) ?? null;
+	return (records ?? []).find((record) => record.type === "MX" && (record.record === "Receiving" || isResendInboundMx(record.value))) ?? null;
 }
 
 function isPublicHttps(origin: string): boolean {
@@ -92,7 +94,7 @@ export async function getResendReceivingView(env: CloudflareEnv, domain: DomainR
 			? true
 			: mx
 				? await hasMx(env, domain, mx.value)
-				: await hasMxMatching(env, domain, isInboundSmtpMx);
+				: await hasMxMatching(env, domain, isResendInboundMx);
 		steps.push({ key: "mx", label: "MX record points to Resend", ok: mxOk === true, detail: mxOk === null ? "Could not check DNS from here" : mx?.value ?? undefined });
 		steps.push({ key: "verified", label: "Domain verified", ok: resend?.status === "verified", detail: resend ? resend.status.replace(/_/g, " ") : undefined });
 		const hooks = await listResendWebhooks(key.apiKey);
@@ -116,7 +118,7 @@ export async function hasResendReceivingConfig(env: CloudflareEnv, domain: Domai
 export async function removeResendReceiving(env: CloudflareEnv, domain: DomainRow): Promise<void> {
 	const apiKey = await getResendApiKey(env);
 	const resend = await findResendDomain(apiKey, domain.hostname);
-	await removeMx(env, domain, isInboundSmtpMx);
+	await removeMx(env, domain, isResendInboundMx);
 	if (!resend) return;
 	if (domain.sendingProvider === "resend") await updateResendCapabilities(apiKey, resend.id, { receiving: false });
 	else await deleteResendDomain(apiKey, resend.id);

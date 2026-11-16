@@ -8,7 +8,12 @@ import type { DomainRow } from "@/lib/domains/types";
 import type { ResendDomainView } from "@/lib/domains/resend-domain-types";
 
 /** Records for sending only; the apex MX for receiving belongs to the receiving setup. */
-const sendingRecords = (records: ResendDomainRecord[] | undefined) => (records ?? []).filter((record) => !(record.type === "MX" && isInboundSmtpMx(record.value)));
+const sendingRecords = (records: ResendDomainRecord[] | undefined) =>
+	(records ?? []).filter(
+		(record) =>
+			record.record !== "Receiving" &&
+			!(record.type === "MX" && (isInboundSmtpMx(record.value) || /rmta\.net|receive\./i.test(record.value))),
+	);
 
 function toView(domain: ResendDomain | null, zoneManaged: boolean, missingDns: number | null = null): ResendDomainView {
 	return {
